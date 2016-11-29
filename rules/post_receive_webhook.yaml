@@ -15,11 +15,7 @@ criteria:
     type: "exists"
 
 action:
-  ref: "packs.deploy"
+  ref: "packs.install"
   parameters:
-    auto_deploy: true
-    repo_name:  "{{trigger.body.repository.name}}"
-    branch:     "{{trigger.body.refChanges[0].refId}}"
-    packs:      [ "{{trigger.body.repository.name}}" ]
-    message:    "{{trigger.body.changesets.get('values')[0].toCommit.message}}"
-    author:     "{{trigger.body.changesets.get('values')[0].toCommit.author.name}}"
+    packs:
+      - "https://bitbucket.org/{{trigger.body.repository.full_name}}={{trigger.body.refChanges[0].refId}}"
