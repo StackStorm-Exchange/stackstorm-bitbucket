@@ -194,16 +194,10 @@ st2 run bitbucket.list_branches repo="<repo_name>"
 
 ### Post-Receive WebHook
 
-This rule triggers ``packs.deploy`` action (in StackStorm v1.4+) to allow
-auto-deployment of single pack repository.
+This rule triggers ``packs.install`` action (in StackStorm v2.1+) to allow
+auto-deployment of a pack from a git repository.
 
-This has a number of pre-dependancies:
-
-- The repository being configured in:
-
-```bash
-/opt/stackstorm/packs/packs/config.yaml
-```
+This has a number of pre-dependencies:
 
 - Setting Workflow / Hooks / Post-Receive WebHooks pointing at the URL:
 
