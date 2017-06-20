@@ -1,5 +1,5 @@
 name: update_issue
-runner_type: run-python
+runner_type: python-script
 description: Update issue for a given repository
 enabled: true
 entry_point: update_issue.py

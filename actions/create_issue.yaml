@@ -1,5 +1,5 @@
 name: create_issue
-runner_type: run-python
+runner_type: python-script
 description: Create an issue
 enabled: true
 entry_point: create_issue.py

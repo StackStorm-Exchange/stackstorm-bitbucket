@@ -1,5 +1,5 @@
 name: delete_services
-runner_type: run-python
+runner_type: python-script
 description: Delete services for a given repository.
 enabled: true
 entry_point: delete_services.py
