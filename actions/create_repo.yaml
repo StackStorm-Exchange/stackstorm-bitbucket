@@ -1,5 +1,5 @@
 name: create_repo
-runner_type: run-python
+runner_type: python-script
 description: Create a Repository
 enabled: true
 entry_point: create_repo.py

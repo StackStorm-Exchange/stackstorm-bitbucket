@@ -1,5 +1,5 @@
 name: associate_ssh_key
-runner_type: run-python
+runner_type: python-script
 description: Associate a SSH key with your account
 enabled: true
 entry_point: associate_ssh_key.py
