@@ -1,10 +1,12 @@
 import stashy
 
-from pybitbucket.bitbucket import Client 
+from pybitbucket.bitbucket import Client
 from pybitbucket.auth import BasicAuthenticator
-from pybitbucket.repository import Repository
+from pybitbucket.user import User
+from pybitbucket.ref import Branch
 
 from datetime import datetime
+from dateutil.parser import parse as tz_parse
 
 from st2reactor.sensor.base import PollingSensor
 
@@ -14,8 +16,8 @@ class RepositorySensor(PollingSensor):
 
     def __init__(self, sensor_service, config=None, poll_interval=None):
         super(RepositorySensor, self).__init__(sensor_service=sensor_service,
-                                                     config=config,
-                                                     poll_interval=poll_interval)
+                                               config=config,
+                                               poll_interval=poll_interval)
         self._trigger_ref = 'bitbucket.repository_event'
         self._logger = self._sensor_service.get_logger(__name__)
         self.last_commit = {}
@@ -25,7 +27,7 @@ class RepositorySensor(PollingSensor):
         if not sensor_config:
             raise ValueError('"sensor" config value is required')
 
-        # validate the format of all repository names 
+        # validate the format of all repository names
         self.repositories = sensor_config.get('repositories')
         if not self.repositories:
             raise ValueError('"repositories" parameter in the "sensor" is required')
@@ -40,8 +42,8 @@ class RepositorySensor(PollingSensor):
         if self.service_type == 'server':
             # initialization for BitBucket Server
             self.client = stashy.connect(sensor_config.get('bitbucket_server_url'),
-                                        self._config.get('username'),
-                                        self._config.get('password'))
+                                         self._config.get('username'),
+                                         self._config.get('password'))
 
             self._init_server_last_commit()
         elif self.service_type == 'cloud':
@@ -51,16 +53,20 @@ class RepositorySensor(PollingSensor):
                 self._config.get('password'),
                 self._config.get('email'),
             ))
+            self._init_cloud_last_commit()
         else:
             raise ValueError('specified bitbucket type (%s) is not supported' % self.service_type)
         self._increment_event_id()
 
     def poll(self):
+        new_commits = []
         if self.service_type == 'server':
-            for commit in self._get_server_updated_commits():
-                self._dispatch_trigger_for_server('commit', commit)
+            new_commits = self._get_server_updated_commits()
         elif self.service_type == 'cloud':
-            pass
+            new_commits = self._get_cloud_updated_commits()
+
+        for commit in new_commits:
+            self._dispatch_trigger_for_server('commit', commit)
 
     def cleanup(self):
         pass
@@ -103,16 +109,22 @@ class RepositorySensor(PollingSensor):
         self._sensor_service.set_value(name=self._trigger_ref,
                                        value=self._get_event_id() + 1)
 
+    # initialize last commit for each branches
     def _init_server_last_commit(self):
-        def do_init_last_commit(repo, branch, last_commit):
-            if repo not in self.last_commit:
-                self.last_commit[repo] = {}
-            self.last_commit[repo][branch] = last_commit
-           
-        # initialize last commit for each branches
-        [[do_init_last_commit(x, b['displayId'], b['latestCommit'])
+        [[self._set_last_commit('%s/%s' % (p, r), b['displayId'], b['latestCommit'])
             for b in self.client.projects[p].repos[r].branches()]
-            for (p,r) in [x.split('/') for x in self.repositories]]
+            for (p, r) in [x.split('/') for x in self.repositories]]
+
+    def _init_cloud_last_commit(self):
+        [[self._set_last_commit('%s/%s' % (o, r), b.name, b.commits().next().hash)
+            for b in Branch.find_branches_in_repository(repository_name=r, client=self.client,
+                                                        owner=o) if isinstance(b, Branch)]
+            for (o, r) in [x.split('/') for x in self.repositories]]
+
+    def _set_last_commit(self, repo, branch, last_commit):
+        if repo not in self.last_commit:
+            self.last_commit[repo] = {}
+        self.last_commit[repo][branch] = last_commit
 
     def _get_server_updated_commits(self):
         new_commits = []
@@ -125,8 +137,8 @@ class RepositorySensor(PollingSensor):
 
                     # append new commit
                     new_commits.append({
-                        'repository': repo,
-                        'branch': branch,
+                        'repository': repo_name,
+                        'branch': branch['displayId'],
                         'author': commit['author']['emailAddress'],
                         'time': datetime.fromtimestamp(commit['authorTimestamp'] / 1000),
                         'msg': commit['message'],
@@ -134,5 +146,40 @@ class RepositorySensor(PollingSensor):
 
                 # update latest commit of target branch
                 self.last_commit[repo_name][branch['displayId']] = branch['latestCommit']
+
+        return new_commits
+
+    def _get_cloud_updated_commits(self):
+        new_commits = []
+        for (owner, repo) in [x.split('/') for x in self.repositories]:
+            repo_name = '%s/%s' % (owner, repo)
+            for branch in Branch.find_branches_in_repository(repository_name=repo,
+                                                             owner=owner, client=self.client):
+
+                # If there is no commit in this branch, pybitbucket returns dict object
+                if not isinstance(branch, Branch):
+                    break
+
+                for commit in branch.commits():
+                    if self.last_commit[repo_name][branch.name] == commit.hash:
+                        break
+
+                    author = 'Unknown'
+                    if isinstance(commit.author, User):
+                        author = commit.author.username
+                    elif isinstance(commit.author, dict):
+                        author = commit.author['raw']
+
+                    # append new commit
+                    new_commits.append({
+                        'repository': repo_name,
+                        'branch': branch.name,
+                        'author': author,
+                        'time': tz_parse(commit.date),
+                        'msg': commit.message,
+                    })
+
+                # update latest commit of target branch
+                self.last_commit[repo_name][branch.name] = branch.commits().next().hash
 
         return new_commits
