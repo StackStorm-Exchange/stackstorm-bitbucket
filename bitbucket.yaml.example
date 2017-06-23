@@ -4,6 +4,6 @@ password: <your-bitbucket-password>
 email: <your-email>
 
 sensor:
-  bitbucket_type: <cloud or server>
+  bitbucket_type: server # or 'cloud'
   repositories:
     - <project/user name>/<repository name>

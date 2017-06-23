@@ -1,9 +1,9 @@
 import stashy
 
-from pybitbucket.bitbucket import Client
 from pybitbucket.auth import BasicAuthenticator
-from pybitbucket.user import User
+from pybitbucket.bitbucket import Client
 from pybitbucket.ref import Branch
+from pybitbucket.user import User
 
 from datetime import datetime
 from dateutil.parser import parse as tz_parse
@@ -107,7 +107,7 @@ class RepositorySensor(PollingSensor):
     # Increments event id of datastore
     def _increment_event_id(self):
         self._sensor_service.set_value(name=self._trigger_ref,
-                                       value=self._get_event_id() + 1)
+                                       value=int(self._get_event_id()) + 1)
 
     # initialize last commit for each branches
     def _init_server_last_commit(self):

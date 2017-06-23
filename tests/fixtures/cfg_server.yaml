@@ -1,0 +1,10 @@
+---
+username: username
+password: password
+email: test@test.local
+
+sensor:
+  bitbucket_type: server
+  repositories:
+    - 'foo/bar'
+    - 'hoge/fuga'
