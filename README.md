@@ -195,6 +195,31 @@ Usage:
 st2 run bitbucket.list_branches repo="<repo_name>"
 ```
 
+## Sensors
+
+### RepositorySensor
+
+This sensor monitors the BitBucket(Cloud/Server) repositories and dispatches following `bitbucket.repository_event` trigger.
+
+Currently, this supports following event type.
+
+* `commit` - Triggered when new commit(a) are made.
+
+#### Trigger: bitbucket.repository_event trigger
+
+Here is an example of trigger payload:
+```
+[
+  {
+    "msg": "updated README to add the description for the function-A",
+    "author": "user.localhost2000@gmail.com",
+    "repository": "XAAS/deploy-test",
+    "branch": "master",
+    "time": "'2017-06-24 08:17:26'"
+  }
+]
+```
+
 ## Rules
 
 ### Post-Receive WebHook
