@@ -6,7 +6,6 @@ from pybitbucket.ref import Branch
 from pybitbucket.user import User
 
 from datetime import datetime
-from dateutil.parser import parse as tz_parse
 
 from st2reactor.sensor.base import PollingSensor
 
@@ -172,11 +171,12 @@ class RepositorySensor(PollingSensor):
                         author = commit.author['raw']
 
                     # append new commit
+                    commit_time = datetime.strptime(commit.date, "%Y-%m-%dT%H:%M:%SZ")
                     new_commits.append({
                         'repository': repo_name,
                         'branch': branch.name,
                         'author': author,
-                        'time': tz_parse(commit.date).strftime(self.DATE_FORMAT),
+                        'time': commit_time.strftime(self.DATE_FORMAT),
                         'msg': commit.message,
                     })
 

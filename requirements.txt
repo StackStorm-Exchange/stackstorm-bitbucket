@@ -1,4 +1,3 @@
 bitbucket-api==0.5.0
-python-dateutil==2.6.0
 pybitbucket==0.12.0
 stashy==0.3
