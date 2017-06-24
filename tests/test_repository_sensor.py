@@ -70,6 +70,7 @@ class RepositorySensorTestCase(BaseSensorTestCase):
                                     contexts)), 4)
         self.assertEqual(len(filter(lambda x: x['payload']['payload']['msg'] == 'commit-2',
                                     contexts)), 2)
+        self.assertTrue(all([isinstance(x['payload']['payload']['time'], str) for x in contexts]))
 
     def test_dispatching_commit_from_cloud(self):
         sensor = self.get_sensor_instance(config=self.cfg_cloud)
@@ -108,6 +109,7 @@ class RepositorySensorTestCase(BaseSensorTestCase):
                                     contexts)), 2)
         self.assertEqual(len(filter(lambda x: x['payload']['payload']['msg'] == 'commit-3',
                                     contexts)), 2)
+        self.assertTrue(all([isinstance(x['payload']['payload']['time'], str) for x in contexts]))
 
 
 class MockCommit(object):

@@ -136,11 +136,12 @@ class RepositorySensor(PollingSensor):
                         break
 
                     # append new commit
+                    commit_time = datetime.fromtimestamp(commit['authorTimestamp'] / 1000)
                     new_commits.append({
                         'repository': repo_name,
                         'branch': branch['displayId'],
                         'author': commit['author']['emailAddress'],
-                        'time': datetime.fromtimestamp(commit['authorTimestamp'] / 1000),
+                        'time': commit_time.strftime(self.DATE_FORMAT),
                         'msg': commit['message'],
                     })
 
@@ -175,7 +176,7 @@ class RepositorySensor(PollingSensor):
                         'repository': repo_name,
                         'branch': branch.name,
                         'author': author,
-                        'time': tz_parse(commit.date),
+                        'time': tz_parse(commit.date).strftime(self.DATE_FORMAT),
                         'msg': commit.message,
                     })
 
