@@ -61,16 +61,18 @@ class RepositorySensorTestCase(BaseSensorTestCase):
             sensor.poll()
 
         contexts = self.get_dispatched_triggers()
-        self.assertEqual(len(contexts), 6)
-        self.assertEqual(len(filter(lambda x: x['payload']['payload']['branch'] == 'master',
-                                    contexts)), 4)
-        self.assertEqual(len(filter(lambda x: x['payload']['payload']['branch'] == 'dev',
-                                    contexts)), 2)
-        self.assertEqual(len(filter(lambda x: x['payload']['payload']['msg'] == 'commit-3',
-                                    contexts)), 4)
-        self.assertEqual(len(filter(lambda x: x['payload']['payload']['msg'] == 'commit-2',
-                                    contexts)), 2)
-        self.assertTrue(all([isinstance(x['payload']['payload']['time'], str) for x in contexts]))
+        self.assertEqual(len(contexts), 1)
+        self.assertEqual(len(filter(lambda x: x['branch'] == 'master',
+                                    contexts[0]['payload']['payload'])), 4)
+        self.assertEqual(len(filter(lambda x: x['branch'] == 'dev',
+                                    contexts[0]['payload']['payload'])), 2)
+        self.assertEqual(len(filter(lambda x: x['msg'] == 'commit-3',
+                                    contexts[0]['payload']['payload'])), 4)
+        self.assertEqual(len(filter(lambda x: x['msg'] == 'commit-2',
+                                    contexts[0]['payload']['payload'])), 2)
+        self.assertTrue(
+            all([isinstance(x['time'], str) for x in contexts[0]['payload']['payload']])
+        )
 
     def test_dispatching_commit_from_cloud(self):
         sensor = self.get_sensor_instance(config=self.cfg_cloud)
@@ -100,16 +102,18 @@ class RepositorySensorTestCase(BaseSensorTestCase):
             sensor.poll()
 
         contexts = self.get_dispatched_triggers()
-        self.assertEqual(len(contexts), 4)
-        self.assertEqual(len(filter(lambda x: x['payload']['payload']['branch'] == 'master',
-                                    contexts)), 4)
-        self.assertEqual(len(filter(lambda x: x['payload']['payload']['branch'] == 'dev',
-                                    contexts)), 0)
-        self.assertEqual(len(filter(lambda x: x['payload']['payload']['msg'] == 'commit-4',
-                                    contexts)), 2)
-        self.assertEqual(len(filter(lambda x: x['payload']['payload']['msg'] == 'commit-3',
-                                    contexts)), 2)
-        self.assertTrue(all([isinstance(x['payload']['payload']['time'], str) for x in contexts]))
+        self.assertEqual(len(contexts), 1)
+        self.assertEqual(len(filter(lambda x: x['branch'] == 'master',
+                                    contexts[0]['payload']['payload'])), 4)
+        self.assertEqual(len(filter(lambda x: x['branch'] == 'dev',
+                                    contexts[0]['payload']['payload'])), 0)
+        self.assertEqual(len(filter(lambda x: x['msg'] == 'commit-4',
+                                    contexts[0]['payload']['payload'])), 2)
+        self.assertEqual(len(filter(lambda x: x['msg'] == 'commit-3',
+                                    contexts[0]['payload']['payload'])), 2)
+        self.assertTrue(
+            all([isinstance(x['time'], str) for x in contexts[0]['payload']['payload']])
+        )
 
 
 class MockCommit(object):

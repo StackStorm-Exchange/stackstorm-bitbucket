@@ -65,8 +65,8 @@ class RepositorySensor(PollingSensor):
         elif self.service_type == 'cloud':
             new_commits = self._get_cloud_updated_commits()
 
-        for commit in new_commits:
-            self._dispatch_trigger_for_server('commit', commit)
+        if new_commits:
+            self._dispatch_trigger_for_server('commit', new_commits)
 
     def cleanup(self):
         pass
