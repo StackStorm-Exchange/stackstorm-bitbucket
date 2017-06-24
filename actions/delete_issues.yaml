@@ -1,5 +1,5 @@
 name: delete_issues
-runner_type: run-python
+runner_type: python-script
 description: Delete issue for a given repository
 enabled: true
 entry_point: delete_issues.py

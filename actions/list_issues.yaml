@@ -1,5 +1,5 @@
 name: list_issues
-runner_type: run-python
+runner_type: python-script
 description: List all issues for a given repository
 enabled: true
 entry_point: list_issues.py

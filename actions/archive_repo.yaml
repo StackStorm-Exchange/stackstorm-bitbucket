@@ -1,5 +1,5 @@
 name: archive_repo
-runner_type: run-python
+runner_type: python-script
 description: Retruns a path to the downloaded archived repository
 enabled: true
 entry_point: archive_repo.py

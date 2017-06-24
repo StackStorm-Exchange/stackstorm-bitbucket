@@ -1,5 +1,5 @@
 name: create_service
-runner_type: run-python
+runner_type: python-script
 description: Create a service/hook for a given repository
 enabled: true
 entry_point: create_service.py
