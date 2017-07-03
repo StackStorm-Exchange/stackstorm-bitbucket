@@ -14,3 +14,28 @@
     type: "string"
     secret: false
     required: true
+  sensor:
+    type: "object"
+    additionalProperties: false
+    properties:
+      bitbucket_type:
+        type: "string"
+        description: "BitBucket service type"
+        required: true
+        enum:
+          - "cloud"
+          - "server"
+      bitbucket_server_url:
+        type: "string"
+        description: "URL of BitBucket server (this is only required to set in the case of the 'bitbucket_type' is set 'server')"
+        required: false
+      repositories:
+        type: "array"
+        description: "Repository names to monitor including username/project (e.g. hoge/fuga)"
+        required: true
+        items:
+          type: "string"
+      timeout:
+        type: "integer"
+        description: "Timeout seconds for confirmation processing"
+        default: 20

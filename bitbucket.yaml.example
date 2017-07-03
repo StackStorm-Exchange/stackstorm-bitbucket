@@ -2,3 +2,9 @@
 username: <bitbucket-username>
 password: <your-bitbucket-password>
 email: <your-email>
+
+sensor:
+  bitbucket_type: server # or 'cloud'
+  repositories:
+    - <project/user name>/<repository name>
+  timeout: 20
