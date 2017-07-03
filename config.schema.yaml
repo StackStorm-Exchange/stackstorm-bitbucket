@@ -32,3 +32,7 @@
         type: "array"
         description: "Repository names to monitor including username/project (e.g. hoge/fuga)"
         required: true
+      timeout:
+        type: "integer"
+        description: "Timeout seconds for confirmation processing"
+        default: 20

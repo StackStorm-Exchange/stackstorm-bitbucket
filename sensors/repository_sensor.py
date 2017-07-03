@@ -5,6 +5,9 @@ from pybitbucket.bitbucket import Client
 from pybitbucket.ref import Branch
 from pybitbucket.user import User
 
+from timeout_decorator import timeout
+from timeout_decorator.timeout_decorator import TimeoutError
+
 from datetime import datetime
 
 from st2reactor.sensor.base import PollingSensor
@@ -12,6 +15,7 @@ from st2reactor.sensor.base import PollingSensor
 
 class RepositorySensor(PollingSensor):
     DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+    TIMEOUT_SECONDS = 20
 
     def __init__(self, sensor_service, config=None, poll_interval=None):
         super(RepositorySensor, self).__init__(sensor_service=sensor_service,
@@ -34,10 +38,12 @@ class RepositorySensor(PollingSensor):
         if not all([len(x.split('/')) == 2 for x in self.repositories]):
             raise ValueError('Invalid repository name is specified in the "repositories" parameter')
 
+        self.TIMEOUT_SECONDS = sensor_config.get('timeout', self.TIMEOUT_SECONDS)
+
         # initialize global parameter
         self.commits = {}
 
-        self.service_type = sensor_config.get('bitbucket_type', '')
+        self.service_type = sensor_config.get('bitbucket_type')
         if self.service_type == 'server':
             # initialization for BitBucket Server
             self.client = stashy.connect(sensor_config.get('bitbucket_server_url'),
@@ -58,14 +64,76 @@ class RepositorySensor(PollingSensor):
         self._increment_event_id()
 
     def poll(self):
-        new_commits = []
-        if self.service_type == 'server':
-            new_commits = self._get_server_updated_commits()
-        elif self.service_type == 'cloud':
-            new_commits = self._get_cloud_updated_commits()
+        @timeout(self.TIMEOUT_SECONDS)
+        def get_server_updated_commits():
+            for (proj, repo) in [x.split('/') for x in self.repositories]:
+                repo_name = '%s/%s' % (proj, repo)
+                for branch in self.client.projects[proj].repos[repo].branches():
+                    for commit in self.client.projects[proj].repos[repo].commits(branch['id']):
+                        commit_time = datetime.fromtimestamp(commit['authorTimestamp'] / 1000)
+                        if commit_time <= self.last_commit[repo_name][branch['displayId']]:
+                            break
 
-        if new_commits:
-            self._dispatch_trigger_for_server('commit', new_commits)
+                        # append new commit
+                        self.new_commits.append({
+                            'repository': repo_name,
+                            'branch': branch['displayId'],
+                            'author': commit['author']['emailAddress'],
+                            'time': commit_time.strftime(self.DATE_FORMAT),
+                            'msg': commit['message'],
+                        })
+
+        @timeout(self.TIMEOUT_SECONDS)
+        def get_cloud_updated_commits():
+            for (owner, repo) in [x.split('/') for x in self.repositories]:
+                repo_name = '%s/%s' % (owner, repo)
+                for branch in Branch.find_branches_in_repository(repository_name=repo,
+                                                                 owner=owner, client=self.client):
+
+                    # If there is no commit in this branch, pybitbucket returns dict object
+                    if not isinstance(branch, Branch):
+                        break
+
+                    for commit in branch.commits():
+                        commit_time = datetime.strptime(commit.date, "%Y-%m-%dT%H:%M:%SZ")
+                        if commit_time <= self.last_commit[repo_name][branch.name]:
+                            break
+
+                        author = 'Unknown'
+                        if isinstance(commit.author, User):
+                            author = commit.author.username
+                        elif isinstance(commit.author, dict):
+                            author = commit.author['raw']
+
+                        # append new commit
+                        self.new_commits.append({
+                            'repository': repo_name,
+                            'branch': branch.name,
+                            'author': author,
+                            'time': commit_time.strftime(self.DATE_FORMAT),
+                            'msg': commit.message,
+                        })
+
+        # On the assumption the case that the processing is aborted by timeout,
+        # we need to prepare the variable to save update information (may be inchoate).
+        #
+        # This variable is cleared at the outset of each polling processing.
+        self.new_commits = []
+
+        try:
+            if self.service_type == 'server':
+                get_server_updated_commits()
+            elif self.service_type == 'cloud':
+                get_cloud_updated_commits()
+        except TimeoutError:
+            self._logger.info('checking processing is timedout')
+
+        if self.new_commits:
+            # update last_commit instance variable
+            self._update_last_commit()
+
+            # dispatch new commit informatoins
+            self._dispatch_trigger('commit', self.new_commits)
 
     def cleanup(self):
         pass
@@ -85,7 +153,7 @@ class RepositorySensor(PollingSensor):
     def _poll_bitbucket_cloud(self):
         pass
 
-    def _dispatch_trigger_for_server(self, event_type, payload):
+    def _dispatch_trigger(self, event_type, payload):
         data = {
             'id': self._get_event_id(),
             'created_at': datetime.now().strftime(self.DATE_FORMAT),
@@ -110,77 +178,44 @@ class RepositorySensor(PollingSensor):
 
     # initialize last commit for each branches
     def _init_server_last_commit(self):
-        [[self._set_last_commit('%s/%s' % (p, r), b['displayId'], b['latestCommit'])
+        def _last_ctime(project, repository, branch):
+            _generator = self.client.projects[project].repos[repository].commits(branch['id'])
+            last_commit = [x for x in _generator if x['id'] == branch['latestCommit']]
+
+            if last_commit:
+                return datetime.fromtimestamp(last_commit[0]['authorTimestamp'] / 1000)
+            else:
+                return datetime.strptime('1900-01-01 00:00:00', self.DATE_FORMAT)
+
+        [[self._set_last_commit_time('%s/%s' % (p, r), b['displayId'], _last_ctime(p, r, b))
             for b in self.client.projects[p].repos[r].branches()]
             for (p, r) in [x.split('/') for x in self.repositories]]
 
     def _init_cloud_last_commit(self):
-        [[self._set_last_commit('%s/%s' % (o, r), b.name, b.commits().next().hash)
+        _TZ_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+        [[self._set_last_commit_time('%s/%s' % (o, r),
+                                     b.name,
+                                     datetime.strptime(b.commits().next().date, _TZ_FORMAT))
             for b in Branch.find_branches_in_repository(repository_name=r, client=self.client,
                                                         owner=o) if isinstance(b, Branch)]
             for (o, r) in [x.split('/') for x in self.repositories]]
 
-    def _set_last_commit(self, repo, branch, last_commit):
+    def _set_last_commit_time(self, repo, branch, last_commit_time):
         if repo not in self.last_commit:
             self.last_commit[repo] = {}
-        self.last_commit[repo][branch] = last_commit
+        self.last_commit[repo][branch] = last_commit_time
 
-    def _get_server_updated_commits(self):
-        new_commits = []
-        for (proj, repo) in [x.split('/') for x in self.repositories]:
-            repo_name = '%s/%s' % (proj, repo)
-            for branch in self.client.projects[proj].repos[repo].branches():
-                for commit in self.client.projects[proj].repos[repo].commits(branch['id']):
-                    if self.last_commit[repo_name][branch['displayId']] == commit['id']:
-                        break
+    def _get_server_branches(self, proj, repo):
+        return [b['displayId'] for b in self.client.projects[proj].repos[repo].branches()]
 
-                    # append new commit
-                    commit_time = datetime.fromtimestamp(commit['authorTimestamp'] / 1000)
-                    new_commits.append({
-                        'repository': repo_name,
-                        'branch': branch['displayId'],
-                        'author': commit['author']['emailAddress'],
-                        'time': commit_time.strftime(self.DATE_FORMAT),
-                        'msg': commit['message'],
-                    })
+    def _get_cloud_branches(self, owner, repo):
+        return [b.name for b in Branch.find_branches_in_repository(repository_name=repo,
+                                                                   client=self.client,
+                                                                   owner=owner)]
 
-                # update latest commit of target branch
-                self.last_commit[repo_name][branch['displayId']] = branch['latestCommit']
+    def _update_last_commit(self):
+        for commit in self.new_commits:
+            commit_time = datetime.strptime(commit['time'], self.DATE_FORMAT)
 
-        return new_commits
-
-    def _get_cloud_updated_commits(self):
-        new_commits = []
-        for (owner, repo) in [x.split('/') for x in self.repositories]:
-            repo_name = '%s/%s' % (owner, repo)
-            for branch in Branch.find_branches_in_repository(repository_name=repo,
-                                                             owner=owner, client=self.client):
-
-                # If there is no commit in this branch, pybitbucket returns dict object
-                if not isinstance(branch, Branch):
-                    break
-
-                for commit in branch.commits():
-                    if self.last_commit[repo_name][branch.name] == commit.hash:
-                        break
-
-                    author = 'Unknown'
-                    if isinstance(commit.author, User):
-                        author = commit.author.username
-                    elif isinstance(commit.author, dict):
-                        author = commit.author['raw']
-
-                    # append new commit
-                    commit_time = datetime.strptime(commit.date, "%Y-%m-%dT%H:%M:%SZ")
-                    new_commits.append({
-                        'repository': repo_name,
-                        'branch': branch.name,
-                        'author': author,
-                        'time': commit_time.strftime(self.DATE_FORMAT),
-                        'msg': commit.message,
-                    })
-
-                # update latest commit of target branch
-                self.last_commit[repo_name][branch.name] = branch.commits().next().hash
-
-        return new_commits
+            if self.last_commit[commit['repository']][commit['branch']] < commit_time:
+                self.last_commit[commit['repository']][commit['branch']] = commit_time

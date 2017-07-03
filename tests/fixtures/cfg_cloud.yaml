@@ -8,3 +8,4 @@ sensor:
   repositories:
     - 'bar/baz'
     - 'fuga/puyo'
+  timeout: 20

@@ -4,6 +4,7 @@ import time
 import yaml
 
 from datetime import datetime
+from datetime import timedelta
 from pybitbucket.ref import Branch
 from pybitbucket.user import User
 from repository_sensor import RepositorySensor
@@ -12,6 +13,14 @@ from st2tests.base import BaseSensorTestCase
 
 class RepositorySensorTestCase(BaseSensorTestCase):
     sensor_cls = RepositorySensor
+
+    def get_mock_commits_for_server(self, commit_num):
+        return [{
+            'id': index,
+            'message': 'commit-%d' % index,
+            'authorTimestamp': int(round((time.time() + index * 100) * 1000)),
+            'author': {'emailAddress': 'test@test.local'},
+        } for index in range(commit_num, 0, -1)]
 
     def client_mock_for_server(self):
         def get_mock(name):
@@ -24,13 +33,9 @@ class RepositorySensorTestCase(BaseSensorTestCase):
             ]
 
         def get_commits(_branch):
-            for index in range(3, 0, -1):
-                yield {
-                    'id': index,
-                    'message': 'commit-%d' % index,
-                    'authorTimestamp': int(round(time.time() * 1000)),
-                    'author': {'emailAddress': 'test@test.local'},
-                }
+            for commit in self.dummy_commits:
+                time.sleep(self.delay)
+                yield commit
 
         client = mock.MagicMock()
         client.projects.__getitem__.side_effect = get_mock
@@ -40,9 +45,6 @@ class RepositorySensorTestCase(BaseSensorTestCase):
 
         return client
 
-    def client_mock_for_cloud(self):
-        return mock.Mock()
-
     def setUp(self):
         super(RepositorySensorTestCase, self).setUp()
 
@@ -50,6 +52,10 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         self.cfg_cloud = yaml.safe_load(self.get_fixture_content('cfg_cloud.yaml'))
 
     def test_dispatching_commit_from_server(self):
+        # set variables for Bitbucket Server test
+        self.dummy_commits = self.get_mock_commits_for_server(3)
+        self.delay = 0
+
         sensor = self.get_sensor_instance(config=self.cfg_server)
 
         with mock.patch.object(stashy, 'connect',
@@ -61,6 +67,7 @@ class RepositorySensorTestCase(BaseSensorTestCase):
             sensor.poll()
 
         contexts = self.get_dispatched_triggers()
+
         self.assertEqual(len(contexts), 1)
         self.assertEqual(len(filter(lambda x: x['branch'] == 'master',
                                     contexts[0]['payload']['payload'])), 4)
@@ -73,6 +80,46 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         self.assertTrue(
             all([isinstance(x['time'], str) for x in contexts[0]['payload']['payload']])
         )
+
+    def test_dispatching_commit_from_server_with_timeout(self):
+        # set variables for Bitbucket Server test
+        self.dummy_commits = self.get_mock_commits_for_server(100)
+        self.delay = 0
+
+        sensor = self.get_sensor_instance(config=self.cfg_server)
+
+        with mock.patch.object(stashy, 'connect',
+                               mock.Mock(return_value=self.client_mock_for_server())):
+            # setup repository_sensor to monitor BitBucket server
+            sensor.setup()
+
+            # set delay and modify timeout-setting for testing
+            # this settings restrict payload number less than 10
+            self.delay = 0.1
+            sensor.TIMEOUT_SECONDS = 1
+
+            # check commits in the target repositories and dispatch them
+            sensor.poll()
+            contexts_first = self.get_dispatched_triggers()
+
+            # clear dispatch_triggers for getting rest update information in the next polling
+            self.sensor_service.dispatched_triggers = []
+
+            # get commits that could not acquired due to the timeout
+            sensor.poll()
+            contexts_second = self.get_dispatched_triggers()
+
+        self.assertEqual(len(contexts_first), 1)
+
+        # If all commits are dispatched in the first polling processing, this value will be 0
+        self.assertEqual(len(contexts_second), 1)
+        self.assertTrue(len(contexts_first[0]['payload']['payload']) <= 10)
+
+        # checking duplicated payload isn't sent in the second dispatching
+        p1 = contexts_first[0]['payload']['payload']
+        p2 = contexts_second[0]['payload']['payload']
+        for (r, b) in set([(x['repository'], x['branch']) for x in p1]):
+            self.assertEqual(filter(lambda x: x['repository'] == r and x['branch'] == b, p2), [])
 
     def test_dispatching_commit_from_cloud(self):
         sensor = self.get_sensor_instance(config=self.cfg_cloud)
@@ -121,4 +168,4 @@ class MockCommit(object):
         self.hash = id
         self.message = 'commit-%d' % id
         self.author = author
-        self.date = datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
+        self.date = (datetime.now() + timedelta(seconds=id)).strftime('%Y-%m-%dT%H:%M:%SZ')

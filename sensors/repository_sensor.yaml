@@ -17,4 +17,4 @@ trigger_types:
         type:
           type: "string"
         payload:
-          type: "object"
+          type: "array"

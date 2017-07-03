@@ -8,3 +8,4 @@ sensor:
   repositories:
     - 'foo/bar'
     - 'hoge/fuga'
+  timeout: 20
