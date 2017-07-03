@@ -16,6 +16,7 @@
     required: true
   sensor:
     type: "object"
+    additionalProperties: false
     properties:
       bitbucket_type:
         type: "string"
@@ -32,6 +33,8 @@
         type: "array"
         description: "Repository names to monitor including username/project (e.g. hoge/fuga)"
         required: true
+        items:
+          type: "string"
       timeout:
         type: "integer"
         description: "Timeout seconds for confirmation processing"
