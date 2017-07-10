@@ -203,7 +203,7 @@ This sensor monitors the BitBucket(Cloud/Server) repositories and dispatches fol
 
 Currently, this supports following event type.
 
-* `commit` - Triggered when new commit(a) are made.
+* `commit` - Triggered when new commit(s) are made.
 
 #### Trigger: bitbucket.repository_event trigger
 
