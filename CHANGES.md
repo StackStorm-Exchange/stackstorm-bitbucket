@@ -1,5 +1,9 @@
 # Change Log
 
+# 0.5.1
+
+- Corrected RepositorySensor to dispatch trigger about update commits by the set of (repository, branch)
+
 # 0.5.0
 
 - Added sensor to monitor events of specified repositories in the BitBucket Cloud or specified BitBucket Server

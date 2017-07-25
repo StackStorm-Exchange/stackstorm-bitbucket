@@ -14,6 +14,9 @@ from st2tests.base import BaseSensorTestCase
 class RepositorySensorTestCase(BaseSensorTestCase):
     sensor_cls = RepositorySensor
 
+    def filter_payload(self, contexts, k, v):
+        return [x['payload']['payload'] for x in contexts if x['payload']['payload'][k] == v]
+
     def get_mock_commits_for_server(self, commit_num):
         return [{
             'id': index,
@@ -68,18 +71,15 @@ class RepositorySensorTestCase(BaseSensorTestCase):
 
         contexts = self.get_dispatched_triggers()
 
-        self.assertEqual(len(contexts), 1)
-        self.assertEqual(len(filter(lambda x: x['branch'] == 'master',
-                                    contexts[0]['payload']['payload'])), 4)
-        self.assertEqual(len(filter(lambda x: x['branch'] == 'dev',
-                                    contexts[0]['payload']['payload'])), 2)
-        self.assertEqual(len(filter(lambda x: x['msg'] == 'commit-3',
-                                    contexts[0]['payload']['payload'])), 4)
-        self.assertEqual(len(filter(lambda x: x['msg'] == 'commit-2',
-                                    contexts[0]['payload']['payload'])), 2)
-        self.assertTrue(
-            all([isinstance(x['time'], str) for x in contexts[0]['payload']['payload']])
-        )
+        self.assertEqual(len(contexts), 4)
+
+        payloads = self.filter_payload(contexts, 'branch', 'master')
+        self.assertEqual(len(payloads), 2)
+        self.assertEqual([len(x['commits']) for x in payloads], [2, 2])
+
+        payloads = self.filter_payload(contexts, 'branch', 'dev')
+        self.assertEqual(len(payloads), 2)
+        self.assertEqual([len(x['commits']) for x in payloads], [1, 1])
 
     def test_dispatching_commit_from_server_with_timeout(self):
         # set variables for Bitbucket Server test
@@ -118,8 +118,9 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         # checking duplicated payload isn't sent in the second dispatching
         p1 = contexts_first[0]['payload']['payload']
         p2 = contexts_second[0]['payload']['payload']
-        for (r, b) in set([(x['repository'], x['branch']) for x in p1]):
-            self.assertEqual(filter(lambda x: x['repository'] == r and x['branch'] == b, p2), [])
+        for (r, b) in set([(x['repository'], x['branch']) for x in p1['commits']]):
+            self.assertEqual(filter(lambda x: x['repository'] == r and x['branch'] == b,
+                                    p2['commits']), [])
 
     def test_dispatching_commit_from_cloud(self):
         sensor = self.get_sensor_instance(config=self.cfg_cloud)
@@ -149,18 +150,14 @@ class RepositorySensorTestCase(BaseSensorTestCase):
             sensor.poll()
 
         contexts = self.get_dispatched_triggers()
-        self.assertEqual(len(contexts), 1)
-        self.assertEqual(len(filter(lambda x: x['branch'] == 'master',
-                                    contexts[0]['payload']['payload'])), 4)
-        self.assertEqual(len(filter(lambda x: x['branch'] == 'dev',
-                                    contexts[0]['payload']['payload'])), 0)
-        self.assertEqual(len(filter(lambda x: x['msg'] == 'commit-4',
-                                    contexts[0]['payload']['payload'])), 2)
-        self.assertEqual(len(filter(lambda x: x['msg'] == 'commit-3',
-                                    contexts[0]['payload']['payload'])), 2)
-        self.assertTrue(
-            all([isinstance(x['time'], str) for x in contexts[0]['payload']['payload']])
-        )
+        self.assertEqual(len(contexts), 2)
+
+        payloads = self.filter_payload(contexts, 'branch', 'master')
+        self.assertEqual(len(payloads), 2)
+        self.assertEqual([len(x['commits']) for x in payloads], [2, 2])
+
+        payloads = self.filter_payload(contexts, 'branch', 'dev')
+        self.assertEqual(len(payloads), 0)
 
 
 class MockCommit(object):
