@@ -132,8 +132,16 @@ class RepositorySensor(PollingSensor):
             # update last_commit instance variable
             self._update_last_commit()
 
-            # dispatch new commit informatoins
-            self._dispatch_trigger('commit', self.new_commits)
+            # dispatch new commit informatoins every repository/branch
+            for (repo, branch) in set([(x['repository'], x['branch']) for x in self.new_commits]):
+                payload = {
+                    'repository': repo,
+                    'branch': branch,
+                    'commits': [x for x in self.new_commits if (x['repository'] == repo and
+                                                                x['branch'] == branch)],
+                }
+
+                self._dispatch_trigger('commit', payload)
 
     def cleanup(self):
         pass
