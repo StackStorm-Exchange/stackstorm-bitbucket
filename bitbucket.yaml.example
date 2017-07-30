@@ -5,6 +5,12 @@ email: <your-email>
 
 sensor:
   bitbucket_type: server # or 'cloud'
-  repositories:
-    - <project/user name>/<repository name>
+  targets:
+    - repository: 'username/repository_name'
+      branches:
+        - 'master'
+    - repository: 'test/foo'
+      branches:
+        - 'master'
+        - 'dev'
   timeout: 20
