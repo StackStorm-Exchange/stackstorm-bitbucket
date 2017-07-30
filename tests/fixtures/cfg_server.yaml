@@ -5,7 +5,12 @@ email: test@test.local
 
 sensor:
   bitbucket_type: server
-  repositories:
-    - 'foo/bar'
-    - 'hoge/fuga'
+  targets:
+    - repository: 'foo/bar'
+      branches:
+        - 'master'
+    - repository: 'hoge/fuga'
+      branches:
+        - 'master'
+        - 'dev'
   timeout: 20

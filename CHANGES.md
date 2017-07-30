@@ -1,5 +1,9 @@
 # Change Log
 
+# 0.5.2
+
+- Fixed the problem that crashes when a new branch is crated after starting by changing configuration schema to specify branches to monitor for each repositories (#9).
+
 # 0.5.1
 
 - Corrected RepositorySensor to dispatch trigger about update commits by the set of (repository, branch)
