@@ -1,5 +1,10 @@
 # Change Log
 
+# 0.5.2
+
+- Changed configuration schema to allow specifying branch to monitor for each repository. You will need to update your configuration.
+  This fixed a crash that occured when a new branch is created after the sensor starts (#9).
+
 # 0.5.1
 
 - Corrected RepositorySensor to dispatch trigger about update commits by the set of (repository, branch)

@@ -29,12 +29,24 @@
         type: "string"
         description: "URL of BitBucket server (this is only required to set in the case of the 'bitbucket_type' is set 'server')"
         required: false
-      repositories:
+      targets:
         type: "array"
-        description: "Repository names to monitor including username/project (e.g. hoge/fuga)"
         required: true
         items:
-          type: "string"
+          type: "object"
+          required: true
+          additionalProperties: false
+          properties:
+            repository:
+              type: "string"
+              description: "Repository name to monitor including username/project (e.g. hoge/fuga)"
+              required: true
+            branches:
+              type: "array"
+              description: "Branch name to monitor in the repository"
+              default: ["master"]
+              items:
+                type: "string"
       timeout:
         type: "integer"
         description: "Timeout seconds for confirmation processing"

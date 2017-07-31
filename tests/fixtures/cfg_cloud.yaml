@@ -5,7 +5,12 @@ email: test@test.local
 
 sensor:
   bitbucket_type: cloud
-  repositories:
-    - 'bar/baz'
-    - 'fuga/puyo'
+  targets:
+    - repository: 'bar/baz'
+      branches:
+        - 'master'
+    - repository: 'fuga/puyo'
+      branches:
+        - 'master'
+        - 'dev'
   timeout: 20

@@ -2,8 +2,10 @@ import stashy
 
 from pybitbucket.auth import BasicAuthenticator
 from pybitbucket.bitbucket import Client
-from pybitbucket.ref import Branch
+from pybitbucket.commit import Commit
 from pybitbucket.user import User
+
+from requests.exceptions import HTTPError
 
 from timeout_decorator import timeout
 from timeout_decorator.timeout_decorator import TimeoutError
@@ -31,12 +33,15 @@ class RepositorySensor(PollingSensor):
             raise ValueError('"sensor" config value is required')
 
         # validate the format of all repository names
-        self.repositories = sensor_config.get('repositories')
-        if not self.repositories:
-            raise ValueError('"repositories" parameter in the "sensor" is required')
+        self.targets = sensor_config.get('targets')
+        if not self.targets:
+            raise ValueError('"targets" parameter in the "sensor" is required')
 
-        if not all([len(x.split('/')) == 2 for x in self.repositories]):
-            raise ValueError('Invalid repository name is specified in the "repositories" parameter')
+        if not all(['repository' in x and 'branches' in x for x in self.targets]):
+            raise ValueError('"repository" and "branches" are mandatory in "sensor.target"')
+
+        if not all([len(x['repository'].split('/')) == 2 for x in self.targets]):
+            raise ValueError('Invalid repository name is specified in the "targets" parameter')
 
         self.TIMEOUT_SECONDS = sensor_config.get('timeout', self.TIMEOUT_SECONDS)
 
@@ -63,56 +68,86 @@ class RepositorySensor(PollingSensor):
             raise ValueError('specified bitbucket type (%s) is not supported' % self.service_type)
         self._increment_event_id()
 
+        self._logger.info("It's ready to monitor events.")
+
     def poll(self):
         @timeout(self.TIMEOUT_SECONDS)
         def get_server_updated_commits():
-            for (proj, repo) in [x.split('/') for x in self.repositories]:
-                repo_name = '%s/%s' % (proj, repo)
-                for branch in self.client.projects[proj].repos[repo].branches():
-                    for commit in self.client.projects[proj].repos[repo].commits(branch['id']):
-                        commit_time = datetime.fromtimestamp(commit['authorTimestamp'] / 1000)
-                        if commit_time <= self.last_commit[repo_name][branch['displayId']]:
-                            break
+            for target in self.targets:
+                (proj, repo) = target['repository'].split('/')
 
-                        # append new commit
-                        self.new_commits.append({
-                            'repository': repo_name,
-                            'branch': branch['displayId'],
-                            'author': commit['author']['emailAddress'],
-                            'time': commit_time.strftime(self.DATE_FORMAT),
-                            'msg': commit['message'],
-                        })
+                # The case of initialized processing was failed
+                if not target['repository'] in self.last_commit:
+                    self._logger.warning('Initialization processing might be failed')
+                    self.last_commit[target['repository']] = {}
+
+                for branch in target['branches']:
+                    # The case that last_commit for branch was blank by some reasons
+                    if branch not in self.last_commit[target['repository']]:
+                        self._logger.info("The branch(%s) isn't initialized" % (branch))
+                        self.last_commit[target['repository']][branch] = datetime.now()
+
+                    try:
+                        for commit in self.client.projects[proj].repos[repo].commits(branch):
+                            commit_time = datetime.fromtimestamp(commit['authorTimestamp'] / 1000)
+                            if commit_time <= self.last_commit[target['repository']][branch]:
+                                break
+
+                            # append new commit
+                            self.new_commits.append({
+                                'repository': target['repository'],
+                                'branch': branch,
+                                'author': commit['author']['emailAddress'],
+                                'time': commit_time.strftime(self.DATE_FORMAT),
+                                'msg': commit['message'],
+                            })
+                    except stashy.errors.NotFoundException as e:
+                        self._logger.warning("branch(%s) doesn't exist in the repository(%s) [%s]" %
+                                             (branch, target['repository'], e))
 
         @timeout(self.TIMEOUT_SECONDS)
         def get_cloud_updated_commits():
-            for (owner, repo) in [x.split('/') for x in self.repositories]:
-                repo_name = '%s/%s' % (owner, repo)
-                for branch in Branch.find_branches_in_repository(repository_name=repo,
-                                                                 owner=owner, client=self.client):
+            for target in self.targets:
+                (proj, repo) = target['repository'].split('/')
 
-                    # If there is no commit in this branch, pybitbucket returns dict object
-                    if not isinstance(branch, Branch):
-                        break
+                # The case of initialized processing was failed
+                if not target['repository'] in self.last_commit:
+                    self._logger.warning('Initialization processing might be failed')
+                    self.last_commit[target['repository']] = {}
 
-                    for commit in branch.commits():
-                        commit_time = datetime.strptime(commit.date, "%Y-%m-%dT%H:%M:%SZ")
-                        if commit_time <= self.last_commit[repo_name][branch.name]:
-                            break
+                for branch in target['branches']:
+                    # The case that last_commit for branch was blank by some reasons
+                    if branch not in self.last_commit[target['repository']]:
+                        self._logger.info("The branch(%s) isn't initialized" % (branch))
+                        self.last_commit[target['repository']][branch] = datetime.now()
 
-                        author = 'Unknown'
-                        if isinstance(commit.author, User):
-                            author = commit.author.username
-                        elif isinstance(commit.author, dict):
-                            author = commit.author['raw']
+                    try:
+                        for commit in Commit.find_commits_in_repository(username=proj,
+                                                                        repository_name=repo,
+                                                                        branch=branch,
+                                                                        client=self.client):
 
-                        # append new commit
-                        self.new_commits.append({
-                            'repository': repo_name,
-                            'branch': branch.name,
-                            'author': author,
-                            'time': commit_time.strftime(self.DATE_FORMAT),
-                            'msg': commit.message,
-                        })
+                            commit_time = datetime.strptime(commit.date, "%Y-%m-%dT%H:%M:%SZ")
+                            if commit_time <= self.last_commit[target['repository']][branch]:
+                                break
+
+                            author = 'Unknown'
+                            if isinstance(commit.author, User):
+                                author = commit.author.username
+                            elif isinstance(commit.author, dict):
+                                author = commit.author['raw']
+
+                            # append new commit
+                            self.new_commits.append({
+                                'repository': target['repository'],
+                                'branch': branch,
+                                'author': author,
+                                'time': commit_time.strftime(self.DATE_FORMAT),
+                                'msg': commit.message,
+                            })
+                    except (ValueError, HTTPError):
+                        self._logger.warning("branch(%s) doesn't exist in the repository(%s)" %
+                                             (branch, target['repository']))
 
         # On the assumption the case that the processing is aborted by timeout,
         # we need to prepare the variable to save update information (may be inchoate).
@@ -187,39 +222,49 @@ class RepositorySensor(PollingSensor):
     # initialize last commit for each branches
     def _init_server_last_commit(self):
         def _last_ctime(project, repository, branch):
-            _generator = self.client.projects[project].repos[repository].commits(branch['id'])
-            last_commit = [x for x in _generator if x['id'] == branch['latestCommit']]
+            commits = self.client.projects[project].repos[repository].commits(branch)
+            last_commit = commits.next()
 
             if last_commit:
-                return datetime.fromtimestamp(last_commit[0]['authorTimestamp'] / 1000)
+                return datetime.fromtimestamp(last_commit['authorTimestamp'] / 1000)
             else:
                 return datetime.strptime('1900-01-01 00:00:00', self.DATE_FORMAT)
 
-        [[self._set_last_commit_time('%s/%s' % (p, r), b['displayId'], _last_ctime(p, r, b))
-            for b in self.client.projects[p].repos[r].branches()]
-            for (p, r) in [x.split('/') for x in self.repositories]]
+        for target in self.targets:
+            (proj, repo) = target['repository'].split('/')
+
+            for branch in target['branches']:
+                try:
+                    self._set_last_commit_time(target['repository'],
+                                               branch,
+                                               _last_ctime(proj, repo, branch))
+                except stashy.errors.NotFoundException as e:
+                    self._logger.warning("branch(%s) doesn't exist in the repository(%s) [%s]" %
+                                         (branch, target['repository'], e))
 
     def _init_cloud_last_commit(self):
-        _TZ_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-        [[self._set_last_commit_time('%s/%s' % (o, r),
-                                     b.name,
-                                     datetime.strptime(b.commits().next().date, _TZ_FORMAT))
-            for b in Branch.find_branches_in_repository(repository_name=r, client=self.client,
-                                                        owner=o) if isinstance(b, Branch)]
-            for (o, r) in [x.split('/') for x in self.repositories]]
+        for target in self.targets:
+            (proj, repo) = target['repository'].split('/')
+
+            for branch in target['branches']:
+                commits = Commit.find_commits_in_repository(username=proj,
+                                                            repository_name=repo,
+                                                            branch=branch,
+                                                            client=self.client)
+
+                try:
+                    self._set_last_commit_time(target['repository'],
+                                               branch,
+                                               datetime.strptime(commits.next().date,
+                                                                 "%Y-%m-%dT%H:%M:%SZ"))
+                except (ValueError, HTTPError) as e:
+                    self._logger.warning("branch(%s) doesn't exist in the repository(%s) [%s]" %
+                                         (branch, target['repository'], e))
 
     def _set_last_commit_time(self, repo, branch, last_commit_time):
         if repo not in self.last_commit:
             self.last_commit[repo] = {}
         self.last_commit[repo][branch] = last_commit_time
-
-    def _get_server_branches(self, proj, repo):
-        return [b['displayId'] for b in self.client.projects[proj].repos[repo].branches()]
-
-    def _get_cloud_branches(self, owner, repo):
-        return [b.name for b in Branch.find_branches_in_repository(repository_name=repo,
-                                                                   client=self.client,
-                                                                   owner=owner)]
 
     def _update_last_commit(self):
         for commit in self.new_commits:

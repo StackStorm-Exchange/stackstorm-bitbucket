@@ -5,7 +5,7 @@ import yaml
 
 from datetime import datetime
 from datetime import timedelta
-from pybitbucket.ref import Branch
+from pybitbucket.commit import Commit
 from pybitbucket.user import User
 from repository_sensor import RepositorySensor
 from st2tests.base import BaseSensorTestCase
@@ -17,23 +17,9 @@ class RepositorySensorTestCase(BaseSensorTestCase):
     def filter_payload(self, contexts, k, v):
         return [x['payload']['payload'] for x in contexts if x['payload']['payload'][k] == v]
 
-    def get_mock_commits_for_server(self, commit_num):
-        return [{
-            'id': index,
-            'message': 'commit-%d' % index,
-            'authorTimestamp': int(round((time.time() + index * 100) * 1000)),
-            'author': {'emailAddress': 'test@test.local'},
-        } for index in range(commit_num, 0, -1)]
-
     def client_mock_for_server(self):
         def get_mock(name):
             return self.client_mock_for_server()
-
-        def get_branches():
-            return [
-                {'displayId': 'master', 'id': 'master', 'latestCommit': 1},
-                {'displayId': 'dev', 'id': 'dev', 'latestCommit': 2},
-            ]
 
         def get_commits(_branch):
             for commit in self.dummy_commits:
@@ -43,7 +29,6 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         client = mock.MagicMock()
         client.projects.__getitem__.side_effect = get_mock
         client.repos.__getitem__.side_effect = get_mock
-        client.branches.side_effect = get_branches
         client.commits.side_effect = get_commits
 
         return client
@@ -56,7 +41,7 @@ class RepositorySensorTestCase(BaseSensorTestCase):
 
     def test_dispatching_commit_from_server(self):
         # set variables for Bitbucket Server test
-        self.dummy_commits = self.get_mock_commits_for_server(3)
+        self.dummy_commits = MockCommitsForServer(3, {'emailAddress': 'test@test.local'})
         self.delay = 0
 
         sensor = self.get_sensor_instance(config=self.cfg_server)
@@ -66,24 +51,36 @@ class RepositorySensorTestCase(BaseSensorTestCase):
             # setup repository_sensor to monitor BitBucket server
             sensor.setup()
 
+            # add a commit after finishing the setup()
+            self.dummy_commits.insert_commit(1)
+
             # check commits in the target repositories and dispatch them
             sensor.poll()
 
         contexts = self.get_dispatched_triggers()
 
-        self.assertEqual(len(contexts), 4)
+        # Sensor monitors the commits each repositories which are specified in the configuration
+        self.assertEqual(len(contexts), 3)
 
         payloads = self.filter_payload(contexts, 'branch', 'master')
         self.assertEqual(len(payloads), 2)
-        self.assertEqual([len(x['commits']) for x in payloads], [2, 2])
+
+        self.assertEqual([len(x['commits']) for x in payloads], [1, 1])
+        self.assertTrue(any([x['repository'] == 'foo/bar' for x in payloads]))
+        self.assertTrue(any([x['repository'] == 'hoge/fuga' for x in payloads]))
 
         payloads = self.filter_payload(contexts, 'branch', 'dev')
-        self.assertEqual(len(payloads), 2)
-        self.assertEqual([len(x['commits']) for x in payloads], [1, 1])
+        self.assertEqual(len(payloads), 1)
+        self.assertEqual([len(x['commits']) for x in payloads], [1])
+        self.assertEqual(payloads[0]['repository'], 'hoge/fuga')
+
+        # checks that commit info has expected parameters
+        commit_keys = ['repository', 'branch', 'author', 'time', 'msg']
+        self.assertTrue(all([x in payloads[0]['commits'][0]] for x in commit_keys))
 
     def test_dispatching_commit_from_server_with_timeout(self):
         # set variables for Bitbucket Server test
-        self.dummy_commits = self.get_mock_commits_for_server(100)
+        self.dummy_commits = MockCommitsForServer(3, {'emailAddress': 'test@test.local'})
         self.delay = 0
 
         sensor = self.get_sensor_instance(config=self.cfg_server)
@@ -97,6 +94,10 @@ class RepositorySensorTestCase(BaseSensorTestCase):
             # this settings restrict payload number less than 10
             self.delay = 0.1
             sensor.TIMEOUT_SECONDS = 1
+
+            # add large amount of commits that can't be fully processed
+            for i in range(100, 1, -1):
+                self.dummy_commits.insert_commit(i)
 
             # check commits in the target repositories and dispatch them
             sensor.poll()
@@ -129,40 +130,97 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         user1 = mock.Mock(spec=User)
         user1.username = 'user1'
 
-        branch1 = mock.Mock(spec=Branch)
-        branch1.name = 'master'
-        branch1.commits = lambda: [(yield MockCommit(x, user1)) for x in range(2, 0, -1)]
+        commits_baz_master = MockCommitsForCloud(2, user1)
+        commits_puyo_master = MockCommitsForCloud(3, user1)
+        commits_puyo_dev = MockCommitsForCloud(4, {'raw': 'user2'})
 
-        branch2 = mock.Mock(spec=Branch)
-        branch2.name = 'dev'
-        branch2.commits = lambda: [(yield MockCommit(x, {'raw': 'user2'})) for x in range(3, 0, -1)]
+        def side_effect(username, repository_name, branch, client):
+            if repository_name == 'baz' and branch == 'master':
+                return commits_baz_master
+            elif repository_name == 'puyo' and branch == 'master':
+                return commits_puyo_master
+            elif repository_name == 'puyo' and branch == 'dev':
+                return commits_puyo_dev
 
-        mock_branches = [branch1, branch2]
-        with mock.patch.object(Branch, 'find_branches_in_repository',
-                               mock.Mock(return_value=mock_branches)):
+        with mock.patch.object(Commit, 'find_commits_in_repository',
+                               mock.Mock(side_effect=side_effect)):
             # setup repository_sensor to monitor BitBucket server
             sensor.setup()
 
-            # update commits of 'master' branch
-            branch1.commits = lambda: [(yield MockCommit(x, user1)) for x in range(4, 0, -1)]
+            # update commits except for 'dev' branch of 'fuga/puyo' repository
+            commits_baz_master.insert_commit(1)
+            commits_puyo_master.insert_commit(1)
 
             # check commits in the target repositories and dispatch them
             sensor.poll()
 
         contexts = self.get_dispatched_triggers()
+
+        # Trigger is going to dispatch three times every following (repository, branch) sets.
+        # - ('bar/baz', 'master')
+        # - ('fuga/puyo', 'master')
         self.assertEqual(len(contexts), 2)
+        self.assertEqual(len(self.filter_payload(contexts, 'repository', 'bar/baz')), 1)
+        self.assertEqual(len(self.filter_payload(contexts, 'repository', 'fuga/puyo')), 1)
+        self.assertEqual(len(self.filter_payload(contexts, 'branch', 'master')), 2)
+        self.assertEqual(len(self.filter_payload(contexts, 'branch', 'dev')), 0)
 
-        payloads = self.filter_payload(contexts, 'branch', 'master')
-        self.assertEqual(len(payloads), 2)
-        self.assertEqual([len(x['commits']) for x in payloads], [2, 2])
-
-        payloads = self.filter_payload(contexts, 'branch', 'dev')
-        self.assertEqual(len(payloads), 0)
+        # checks that commit info has expected parameters
+        commit_keys = ['repository', 'branch', 'author', 'time', 'msg']
+        commit_info = self.filter_payload(contexts, 'branch', 'master')[0]['commits'][0]
+        self.assertTrue(all([x in commit_info for x in commit_keys]))
 
 
-class MockCommit(object):
-    def __init__(self, id, author):
-        self.hash = id
-        self.message = 'commit-%d' % id
+class MockCommits(object):
+    def __init__(self, count, author, commit_model):
+        self.commits = []
+        self.index = 0
         self.author = author
-        self.date = (datetime.now() + timedelta(seconds=id)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        self.model = commit_model
+
+        for x in range(0, count):
+            self.commits.append(self.model(x, self.author, self.index * -1))
+
+    def __iter__(self):
+        self.index = 0
+        return self
+
+    def next(self):
+        if self.index >= len(self.commits):
+            raise StopIteration()
+        value = self.commits[self.index]
+        self.index += 1
+        return value
+
+    def insert_commit(self, delta_seconds=0):
+        self.commits.insert(0, self.model(len(self.commits), self.author, delta_seconds))
+
+
+class MockCommitsForServer(MockCommits):
+    class CommitModel(object):
+        def __init__(self, index, author, delta_seconds):
+            self.data = {
+                'message': 'commit-%d' % index,
+                'authorTimestamp': int(round((time.time() + delta_seconds * 100) * 1000)),
+                'author': author,
+            }
+
+        def __getitem__(self, key):
+            return self.data[key]
+
+    def __init__(self, count, author):
+        super(MockCommitsForServer, self).__init__(count, author, self.CommitModel)
+
+
+class MockCommitsForCloud(MockCommits):
+    class CommitModel(object):
+        def __init__(self, index, author, delta_seconds):
+            commit_time = (datetime.now() +
+                           timedelta(seconds=delta_seconds)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+            self.message = 'commit-%d' % index
+            self.author = author
+            self.date = commit_time
+
+    def __init__(self, count, author):
+        super(MockCommitsForCloud, self).__init__(count, author, self.CommitModel)
