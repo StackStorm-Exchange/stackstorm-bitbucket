@@ -2,7 +2,8 @@
 
 # 0.5.2
 
-- Fixed the problem that crashes when a new branch is crated after starting by changing configuration schema to specify branches to monitor for each repositories (#9).
+- Changed configuration schema to allow specifying branch to monitor for each repository. You will need to update your configuration.
+  This fixed a crash that occured when a new branch is created after the sensor starts (#9).
 
 # 0.5.1
 
