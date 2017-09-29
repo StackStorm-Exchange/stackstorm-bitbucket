@@ -1,3 +1,4 @@
+import json
 import stashy
 
 from pybitbucket.auth import BasicAuthenticator
@@ -73,6 +74,28 @@ class RepositorySensor(PollingSensor):
     def poll(self):
         @timeout(self.TIMEOUT_SECONDS)
         def get_server_updated_commits():
+            def get_commit_info(repo, commit_id):
+                """
+                This returns detail information associated with the specific commit-id
+                to get the changed files in the commit.
+                """
+                res = repo._client.get(repo.url('/commits/{}/changes'.format(commit_id)))
+                return json.loads(res.content)
+
+            def get_updated_files(commit):
+                """
+                This returns file-pathes which are changed in this commit.
+                """
+                def do_get_updated_files(req_type):
+                    return [x['path']['toString'] for x in commit['values'] if x['type'] == req_type]
+
+                return {
+                    'added': do_get_updated_files('ADD'),
+                    'moved': do_get_updated_files('MOVE'),
+                    'deleted': do_get_updated_files('DELETE'),
+                    'modified': do_get_updated_files('MODIFY'),
+                }
+
             for target in self.targets:
                 (proj, repo) = target['repository'].split('/')
 
@@ -88,7 +111,8 @@ class RepositorySensor(PollingSensor):
                         self.last_commit[target['repository']][branch] = datetime.now()
 
                     try:
-                        for commit in self.client.projects[proj].repos[repo].commits(branch):
+                        robj = self.client.projects[proj].repos[repo]
+                        for commit in robj.commits(branch):
                             commit_time = datetime.fromtimestamp(commit['authorTimestamp'] / 1000)
                             if commit_time <= self.last_commit[target['repository']][branch]:
                                 break
@@ -100,6 +124,7 @@ class RepositorySensor(PollingSensor):
                                 'author': commit['author']['emailAddress'],
                                 'time': commit_time.strftime(self.DATE_FORMAT),
                                 'msg': commit['message'],
+                                'files': get_updated_files(get_commit_info(robj, commit['id'])),
                             })
                     except stashy.errors.NotFoundException as e:
                         self._logger.warning("branch(%s) doesn't exist in the repository(%s) [%s]" %
@@ -144,6 +169,7 @@ class RepositorySensor(PollingSensor):
                                 'author': author,
                                 'time': commit_time.strftime(self.DATE_FORMAT),
                                 'msg': commit.message,
+                                'files': {},  # XXX: This is not implemented, yet.
                             })
                     except (ValueError, HTTPError):
                         self._logger.warning("branch(%s) doesn't exist in the repository(%s)" %
@@ -174,7 +200,18 @@ class RepositorySensor(PollingSensor):
                     'branch': branch,
                     'commits': [x for x in self.new_commits if (x['repository'] == repo and
                                                                 x['branch'] == branch)],
+                    # The file informations which are changed in the added commits are set.
+                    'changed_files': {'added': [], 'moved': [], 'deleted': [], 'modified': []},
                 }
+
+                # This processing enables to make a more complex criteria in the Rule
+                for t in ['added', 'moved', 'deleted', 'modified']:
+                    # Tally up the all changed-files
+                    payload['changed_files'][t] += \
+                            sum([x['files'][t] for x in self.new_commits if t in x['files']], [])
+
+                    # De-duplicate each changed-files
+                    payload['changed_files'][t] = list(set(payload['changed_files'][t]))
 
                 self._dispatch_trigger('commit', payload)
 

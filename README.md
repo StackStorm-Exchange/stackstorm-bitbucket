@@ -209,16 +209,25 @@ Currently, this supports following event type.
 
 Here is an example of trigger payload:
 ```
-[
-  {
-    "msg": "updated README to add the description for the function-A",
-    "author": "user.localhost2000@gmail.com",
-    "repository": "XAAS/deploy-test",
-    "branch": "master",
-    "time": "'2017-06-24 08:17:26'"
-  }
-]
+{
+  "repository": "xaas/deploy-test",
+  "branch": "master",
+  "changed_files": {"deleted": [], "added": [], "moved": [], "modified": ["foo/bar", u"hoge/fuga/tmp01"]},
+  "commits": [
+    {
+      "msg": "updated README to add the description for the function-A",
+      "author": "user.localhost2000@gmail.com",
+      "repository": "XAAS/deploy-test",
+      "branch": "master",
+      "time": "'2017-06-24 08:17:26'"
+      "files": {"deleted": [], "added": [], "moved": [], "modified": ["foo/bar"]},
+    },
+    ...
+  ]
+}
 ```
+
+*restriction* The `files` and `changed_files` parameters are not set in the Bitbucket cloud (The feature is not implemented, yet)
 
 ## Rules
 
