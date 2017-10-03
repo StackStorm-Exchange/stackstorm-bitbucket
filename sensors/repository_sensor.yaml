@@ -18,3 +18,26 @@ trigger_types:
           type: "string"
         payload:
           type: "object"
+          properties:
+            commits:
+              type: "array"
+              items: "object"
+            repository:
+              type: "string"
+            branch:
+              type: "string"
+            changed_files:
+              type: "object"
+              properties:
+                added:
+                  type: "array"
+                  items: "string"
+                moved:
+                  type: "array"
+                  items: "string"
+                modified:
+                  type: "array"
+                  items: "string"
+                deleted:
+                  type: "array"
+                  items: "string"

@@ -87,7 +87,8 @@ class RepositorySensor(PollingSensor):
                 This returns file-pathes which are changed in this commit.
                 """
                 def do_get_updated_files(req_type):
-                    return [x['path']['toString'] for x in commit['values'] if x['type'] == req_type]
+                    return [x['path']['toString'] for x in commit['values']
+                            if x['type'] == req_type]
 
                 return {
                     'added': do_get_updated_files('ADD'),
@@ -207,8 +208,8 @@ class RepositorySensor(PollingSensor):
                 # This processing enables to make a more complex criteria in the Rule
                 for t in ['added', 'moved', 'deleted', 'modified']:
                     # Tally up the all changed-files
-                    payload['changed_files'][t] += \
-                            sum([x['files'][t] for x in self.new_commits if t in x['files']], [])
+                    payload['changed_files'][t] += sum([x['files'][t] for x in self.new_commits
+                                                        if t in x['files']], [])
 
                     # De-duplicate each changed-files
                     payload['changed_files'][t] = list(set(payload['changed_files'][t]))
