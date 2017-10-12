@@ -1,6 +1,7 @@
 import mock
 import stashy
 import time
+import json
 import yaml
 
 from datetime import datetime
@@ -26,10 +27,37 @@ class RepositorySensorTestCase(BaseSensorTestCase):
                 time.sleep(self.delay)
                 yield commit
 
+        mock_response = mock.Mock()
+        mock_response.content = json.dumps({
+            'values': [
+                {
+                    'type': 'ADD',
+                    'path': {'toString': 'foo/bar'},
+                },
+                {
+                    'type': 'MOVE',
+                    'path': {'toString': 'foo/baz'},
+                },
+                {
+                    'type': 'DELETE',
+                    'path': {'toString': 'abcd'},
+                },
+                {
+                    'type': 'MODIFY',
+                    'path': {'toString': 'hoge'},
+                },
+                {
+                    'type': 'MODIFY',
+                    'path': {'toString': 'fuga'},
+                },
+            ],
+        })
+
         client = mock.MagicMock()
         client.projects.__getitem__.side_effect = get_mock
         client.repos.__getitem__.side_effect = get_mock
         client.commits.side_effect = get_commits
+        client._client.get.return_value = mock_response
 
         return client
 
@@ -77,6 +105,16 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         # checks that commit info has expected parameters
         commit_keys = ['repository', 'branch', 'author', 'time', 'msg']
         self.assertTrue(all([x in payloads[0]['commits'][0]] for x in commit_keys))
+
+        # checks that payloads has the information about the changed files
+        changing_types = ['added', 'moved', 'deleted', 'modified']
+        changing_files = payloads[0]['changed_files']
+
+        self.assertTrue(all([key in changing_files for key in changing_types]))
+        self.assertEqual(changing_files['added'], ['foo/bar'])
+        self.assertEqual(changing_files['moved'], ['foo/baz'])
+        self.assertEqual(changing_files['deleted'], ['abcd'])
+        self.assertEqual(sorted(changing_files['modified']), sorted(['hoge', 'fuga']))
 
     def test_dispatching_commit_from_server_with_timeout(self):
         # set variables for Bitbucket Server test
@@ -200,6 +238,7 @@ class MockCommitsForServer(MockCommits):
     class CommitModel(object):
         def __init__(self, index, author, delta_seconds):
             self.data = {
+                'id': '0123456789abcdefghijklmnopqrstuvwxyzABCD',
                 'message': 'commit-%d' % index,
                 'authorTimestamp': int(round((time.time() + delta_seconds * 100) * 1000)),
                 'author': author,

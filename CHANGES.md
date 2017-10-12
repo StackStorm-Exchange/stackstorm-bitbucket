@@ -1,5 +1,10 @@
 # Change Log
 
+# 0.5.3
+
+- Added a parameter `changed_files` on the dispatching payload to enable to identify the changed files in the updated commits.
+  (But this parameter is only set for the repository on the BitBucket server)
+
 # 0.5.2
 
 - Changed configuration schema to allow specifying branch to monitor for each repository. You will need to update your configuration.
