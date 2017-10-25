@@ -1,10 +1,10 @@
 ---
-username: <bitbucket-username>
-password: <your-bitbucket-password>
-email: <your-email>
+username: 'bitbucket-username'
+password: 'your-bitbucket-password'
+email: 'email@example.com'
 
 sensor:
-  bitbucket_type: server # or 'cloud'
+  bitbucket_type: 'server' # or 'cloud'
   targets:
     - repository: 'username/repository_name'
       branches:
