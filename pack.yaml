@@ -15,3 +15,6 @@ email: raza.aamir01@gmail.com
 contributors:
   - Edward Medvedev <edward.medvedev@gmail.com>
   - Hiroyasu OHYAMA <user.localhost2000@gmail.com>
+python_versions:
+  - "2"
+  - "3"
