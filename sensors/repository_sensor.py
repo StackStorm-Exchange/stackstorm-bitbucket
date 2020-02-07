@@ -291,10 +291,9 @@ class RepositorySensor(PollingSensor):
                                                             client=self.client)
 
                 try:
-                    self._set_last_commit_time(target['repository'],
-                                               branch,
-                                               datetime.strptime(commits.next().date,
-                                                                 "%Y-%m-%dT%H:%M:%SZ"))
+                    date_ = datetime.strptime(commits.next().date,  # pylint: disable=no-member
+                                              "%Y-%m-%dT%H:%M:%SZ")
+                    self._set_last_commit_time(target['repository'], branch, date_)
                 except (ValueError, HTTPError) as e:
                     self._logger.warning("branch(%s) doesn't exist in the repository(%s) [%s]" %
                                          (branch, target['repository'], e))
