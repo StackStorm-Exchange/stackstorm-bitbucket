@@ -1,5 +1,14 @@
 # Change Log
 
+# 0.5.5
+
+- Fixups for Python 3 compatibility
+- Add explicit support for Python 2 and 3
+
+# 0.5.4
+
+- Remove deprecated st2actions import
+
 # 0.5.3
 
 - Added a parameter `changed_files` on the dispatching payload to enable to identify the changed files in the updated commits.
