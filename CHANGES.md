@@ -1,5 +1,9 @@
 # Change Log
 
+# 0.6.0
+
+- Added an action `open_pull_request`
+
 # 0.5.3
 
 - Added a parameter `changed_files` on the dispatching payload to enable to identify the changed files in the updated commits.
