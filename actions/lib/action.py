@@ -15,3 +15,10 @@ class BitBucketAction(Action):
             bb = Bitbucket(username=self.config['email'],
                            password=self.config['password'])
         return bb
+
+    def _get_stashy_client(self):
+        # Late import to avoid clutter
+        import stashy
+        return stashy.connect(self.config['sensor']['bitbucket_server_url'],
+                              self.config['username'],
+                              self.config['password'])

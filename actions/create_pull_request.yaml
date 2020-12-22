@@ -1,0 +1,36 @@
+name: create_pull_request
+description: Create a pull request
+enabled: true
+runner_type: python-script
+entry_point: create_pull_request.py
+parameters:
+  project:
+    type: string
+    description: Bitbucket project the repo is under
+    required: true
+  repository:
+    type: string
+    description: Name of the repository
+    required: true
+  title:
+    type: string
+    description: Pull request title/short description
+    required: true
+  description:
+    type: string
+    description: Pull request description
+    required: true
+  source:
+    type: string
+    description: The branch name, tag, or commit hash to merge from
+    required: true
+  target:
+    type: string
+    description: The branch name, tag, or commit hash to merge into
+    required: true
+  reviewers:
+    type: array
+    description: List of usernames to add as reviewers
+    required: false
+    items:
+      type: string
