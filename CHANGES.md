@@ -1,5 +1,9 @@
 # Change Log
 
+# 1.0.0
+
+* Drop Python 2.7 support
+
 # 0.5.3
 
 - Added a parameter `changed_files` on the dispatching payload to enable to identify the changed files in the updated commits.
