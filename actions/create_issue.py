@@ -7,7 +7,7 @@ class CreateIssueAction(BitBucketAction):
         Create an issue
         """
         bb = self._get_client(repo=repo)
-        print bb.username
+        print(bb.username)
         success, result = bb.issue.create(
             title=title,
             content=desc,

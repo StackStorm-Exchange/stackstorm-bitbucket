@@ -1,5 +1,9 @@
 # Change Log
 
+# 1.0.1
+
+* Bug fix: python3 syntax fix
+
 # 1.0.0
 
 * Drop Python 2.7 support
