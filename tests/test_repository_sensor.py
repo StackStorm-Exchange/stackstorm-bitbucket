@@ -158,8 +158,11 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         p1 = contexts_first[0]['payload']['payload']
         p2 = contexts_second[0]['payload']['payload']
         for (r, b) in set([(x['repository'], x['branch']) for x in p1['commits']]):
-            self.assertEqual(filter(lambda x: x['repository'] == r and x['branch'] == b,
-                                    p2['commits']), [])
+            self.assertEqual(
+                list(
+                    filter(lambda x: x['repository'] == r and x['branch'] == b, p2['commits'])
+                ), []
+            )
 
     def test_dispatching_commit_from_cloud(self):
         sensor = self.get_sensor_instance(config=self.cfg_cloud)
