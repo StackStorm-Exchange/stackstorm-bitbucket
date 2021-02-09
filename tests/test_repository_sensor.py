@@ -24,9 +24,8 @@ class RepositorySensorTestCase(BaseSensorTestCase):
             return self.client_mock_for_server()
 
         def get_commits(_branch):
-            for commit in self.dummy_commits:
-                time.sleep(self.delay)
-                yield commit
+            self.dummy_commits.delay = self.delay
+            return self.dummy_commits
 
         mock_response = mock.Mock()
         mock_response.content = json.dumps({
@@ -212,6 +211,7 @@ class RepositorySensorTestCase(BaseSensorTestCase):
 
 class MockCommits(collections.Iterator):
     def __init__(self, count, author, commit_model):
+        self.delay = None
         self.commits = []
         self.index = 0
         self.author = author
@@ -228,6 +228,8 @@ class MockCommits(collections.Iterator):
         return self.next()
 
     def next(self):
+        if self.delay:
+            time.sleep(self.delay)
         if self.index >= len(self.commits):
             raise StopIteration()
         value = self.commits[self.index]
