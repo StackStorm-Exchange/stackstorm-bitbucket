@@ -1,3 +1,4 @@
+import collections
 import mock
 import stashy
 import time
@@ -209,7 +210,7 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         self.assertTrue(all([x in commit_info for x in commit_keys]))
 
 
-class MockCommits(object):
+class MockCommits(collections.Iterator):
     def __init__(self, count, author, commit_model):
         self.commits = []
         self.index = 0
@@ -222,6 +223,9 @@ class MockCommits(object):
     def __iter__(self):
         self.index = 0
         return self
+
+    def __next__(self):
+        return self.next()
 
     def next(self):
         if self.index >= len(self.commits):
