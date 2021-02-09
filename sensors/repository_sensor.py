@@ -261,7 +261,7 @@ class RepositorySensor(PollingSensor):
     def _init_server_last_commit(self):
         def _last_ctime(project, repository, branch):
             commits = self.client.projects[project].repos[repository].commits(branch)
-            last_commit = commits.next()
+            last_commit = commits.next()  # pylint: disable=no-member
 
             if last_commit:
                 return datetime.fromtimestamp(last_commit['authorTimestamp'] / 1000)
@@ -291,6 +291,8 @@ class RepositorySensor(PollingSensor):
                                                             client=self.client)
 
                 try:
+                    # Disables pylint's no-member checks for rest of the code block
+                    # pylint: disable=no-member
                     self._set_last_commit_time(target['repository'],
                                                branch,
                                                datetime.strptime(commits.next().date,
