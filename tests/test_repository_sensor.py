@@ -1,3 +1,4 @@
+import collections
 import mock
 import stashy
 import time
@@ -23,9 +24,8 @@ class RepositorySensorTestCase(BaseSensorTestCase):
             return self.client_mock_for_server()
 
         def get_commits(_branch):
-            for commit in self.dummy_commits:
-                time.sleep(self.delay)
-                yield commit
+            self.dummy_commits.delay = self.delay
+            return self.dummy_commits
 
         mock_response = mock.Mock()
         mock_response.content = json.dumps({
@@ -158,8 +158,11 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         p1 = contexts_first[0]['payload']['payload']
         p2 = contexts_second[0]['payload']['payload']
         for (r, b) in set([(x['repository'], x['branch']) for x in p1['commits']]):
-            self.assertEqual(filter(lambda x: x['repository'] == r and x['branch'] == b,
-                                    p2['commits']), [])
+            self.assertEqual(
+                list(
+                    filter(lambda x: x['repository'] == r and x['branch'] == b, p2['commits'])
+                ), []
+            )
 
     def test_dispatching_commit_from_cloud(self):
         sensor = self.get_sensor_instance(config=self.cfg_cloud)
@@ -209,8 +212,9 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         self.assertTrue(all([x in commit_info for x in commit_keys]))
 
 
-class MockCommits(object):
+class MockCommits(collections.Iterator):
     def __init__(self, count, author, commit_model):
+        self.delay = None
         self.commits = []
         self.index = 0
         self.author = author
@@ -223,7 +227,12 @@ class MockCommits(object):
         self.index = 0
         return self
 
+    def __next__(self):
+        return self.next()
+
     def next(self):
+        if self.delay:
+            time.sleep(self.delay)
         if self.index >= len(self.commits):
             raise StopIteration()
         value = self.commits[self.index]
