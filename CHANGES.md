@@ -1,5 +1,9 @@
 # Change Log
 
+# 1.0.3
+
+* Updated files to work with latest CI updates
+
 # 1.0.2
 
 * Bug fix: python3 syntax fix
