@@ -1,4 +1,4 @@
-import collections
+from collections.abc import Iterator
 import mock
 import stashy
 import time
@@ -212,7 +212,7 @@ class RepositorySensorTestCase(BaseSensorTestCase):
         self.assertTrue(all([x in commit_info for x in commit_keys]))
 
 
-class MockCommits(collections.Iterator):
+class MockCommits(Iterator):
     def __init__(self, count, author, commit_model):
         self.delay = None
         self.commits = []

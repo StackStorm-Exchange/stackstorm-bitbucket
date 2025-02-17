@@ -1,0 +1,2 @@
+stashy==0.3
+pybitbucket==0.12.0
